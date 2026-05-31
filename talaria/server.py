@@ -111,11 +111,18 @@ class TalariaApp:
             return self._json_error(502, f"upstream stream init failed: {exc}")
 
         if stream:
-            out = b"".join(translate.events_to_anthropic_sse(events, model.alias))
+            event_list = list(events)
+            error = _first_error(event_list)
+            if error:
+                return self._json_error(int(error.get("status", 502) or 502), str(error.get("message") or "upstream error"))
+            out = b"".join(translate.events_to_anthropic_sse(event_list, model.alias))
             headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}
             return 200, headers, out
 
         non_stream_events = list(events)
+        error = _first_error(non_stream_events)
+        if error:
+            return self._json_error(int(error.get("status", 502) or 502), str(error.get("message") or "upstream error"))
         return (
             200,
             {"Content-Type": "application/json"},
@@ -160,6 +167,13 @@ def create_http_handler(app: TalariaApp):
             return
 
     return _Handler
+
+
+def _first_error(events: Iterable[dict]) -> dict | None:
+    for event in events:
+        if isinstance(event, dict) and event.get("type") == "error":
+            return event
+    return None
 
 
 def run_server(host: str, port: int, catalog: Iterable[CodexModel], event_stream: EventStream = codex.stream_events):

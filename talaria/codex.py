@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import ssl
 import subprocess
 import time
 import urllib.error
@@ -17,6 +18,7 @@ AUTH_FILE = CODEX_HOME / "auth.json"
 RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses"
 DEFAULT_REASONING_EFFORT = os.environ.get("TALARIA_REASONING_EFFORT", "medium")
 DEFAULT_SERVICE_TIER = os.environ.get("TALARIA_SERVICE_TIER", "").strip()
+SYSTEM_CERT_FILE = Path("/etc/ssl/cert.pem")
 
 
 class CodexAuthError(RuntimeError):
@@ -113,6 +115,15 @@ def _as_int(value: str) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _ssl_context():
+    paths = ssl.get_default_verify_paths()
+    if paths.cafile:
+        return None
+    if SYSTEM_CERT_FILE.is_file():
+        return ssl.create_default_context(cafile=str(SYSTEM_CERT_FILE))
+    return None
+
+
 def _iter_sse_events(response):
     buffer = b""
     while True:
@@ -188,7 +199,11 @@ def stream_events(
     request = urllib.request.Request(RESPONSES_URL, data=data, headers=headers, method="POST")
 
     try:
-        response = urllib.request.urlopen(request, timeout=600)
+        context = _ssl_context()
+        if context is None:
+            response = urllib.request.urlopen(request, timeout=600)
+        else:
+            response = urllib.request.urlopen(request, timeout=600, context=context)
     except urllib.error.HTTPError as exc:
         detail = ""
         try:
@@ -203,24 +218,6 @@ def stream_events(
         return
     except Exception as exc:
         yield {"type": "error", "message": f"Codex API error: {exc}", "status": 502}
-        return
-
-    ctype = response.headers.get("Content-Type", "")
-    if "text/event-stream" not in ctype:
-        raw = response.read().decode("utf-8", "replace")
-        if raw.strip():
-            try:
-                parsed = json.loads(raw)
-            except Exception as exc:
-                yield {"type": "error", "message": f"Bad Codex JSON payload: {exc}", "status": 502}
-                return
-            usage = parsed.get("usage") or {}
-            if usage:
-                yield {
-                    "type": "usage",
-                    "input_tokens": int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0),
-                    "output_tokens": int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0),
-                }
         return
 
     pending: dict[str, dict[str, str]] = {}

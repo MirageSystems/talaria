@@ -19,6 +19,24 @@ Validation:
 - `python3 -m talaria.cli doctor`
 - `node bin/talaria.js doctor`
 
+## 2026-06-01 03:02 [E2E] live Codex gateway test
+
+Installed Claude Code from the official npm package and ran live Talaria checks
+against the local Codex login:
+
+- `claude --version` -> `2.1.159 (Claude Code)`.
+- Talaria discovered 6 visible Codex models.
+- Local HTTP `/v1/messages` non-streaming request to `claude-gpt-5.4-mini`
+  returned text `OK` with usage.
+- Local HTTP `/v1/messages` streaming request to `claude-gpt-5.4-mini`
+  returned Anthropic SSE with `message_start`, `OK`, and `message_stop`.
+
+Fixes from live test:
+- Use the system certificate bundle when Python's OpenSSL default CA path is
+  empty.
+- Parse Codex SSE even when the backend omits `Content-Type`.
+- Surface upstream errors as HTTP errors instead of empty assistant messages.
+
 ## 2026-06-01 02:28 [IMPLEMENTATION] talaria runtime committed
 
 Implemented a Codex-only runtime in this repo:

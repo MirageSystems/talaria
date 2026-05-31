@@ -146,7 +146,7 @@ class CodexProviderTests(unittest.TestCase):
             def read(self, _n):
                 return self._chunks.pop(0) if self._chunks else b""
 
-        def fake_urlopen(req, timeout):
+        def fake_urlopen(req, timeout, **_kwargs):
             captured["body"] = json.loads(req.data.decode("utf-8"))
             captured["headers"] = dict(req.headers)
             return FakeResp()
@@ -229,6 +229,25 @@ class ServerTests(unittest.TestCase):
 
         self.assertEqual(status, 400)
         self.assertIn("unknown Codex model alias", body.decode("utf-8"))
+
+    def test_upstream_error_is_http_error_not_empty_message(self):
+        from talaria.catalog import CodexModel
+        from talaria.server import TalariaApp
+
+        app = TalariaApp(
+            [CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")],
+            event_stream=lambda **_kwargs: iter([{"type": "error", "message": "upstream failed", "status": 502}]),
+        )
+
+        status, _headers, body = app.handle(
+            "POST",
+            "/v1/messages",
+            {"Content-Type": "application/json"},
+            b'{"model":"claude-gpt-5.5","messages":[]}',
+        )
+
+        self.assertEqual(status, 502)
+        self.assertIn("upstream failed", body.decode("utf-8"))
 
     def test_rejects_browser_origin_posts(self):
         from talaria.catalog import CodexModel
