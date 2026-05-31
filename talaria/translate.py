@@ -321,6 +321,13 @@ def events_to_anthropic_sse(events: Iterable[dict], model_alias: str):
                 },
             )
             if args is not None:
+                if isinstance(args, str):
+                    partial_args = args
+                else:
+                    try:
+                        partial_args = json.dumps(args)
+                    except Exception:
+                        partial_args = str(args)
                 yield _sse(
                     "content_block_delta",
                     {
@@ -328,7 +335,7 @@ def events_to_anthropic_sse(events: Iterable[dict], model_alias: str):
                         "index": block_index,
                         "delta": {
                             "type": "input_json_delta",
-                            "partial_json": str(args),
+                            "partial_json": partial_args,
                         },
                     },
                 )
