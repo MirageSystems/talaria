@@ -329,6 +329,35 @@ class CliTests(unittest.TestCase):
         self.assertIn("Install: npm install -g @anthropic-ai/claude-code", text)
         self.assertIn("Run: talaria doctor", text)
 
+    def test_setup_uses_python_version_check(self):
+        from talaria.checks import Check
+        from talaria.catalog import CodexModel
+        import talaria.cli as cli
+
+        output = io.StringIO()
+        with mock.patch.object(cli, "check_python", return_value=Check("python", False, "3.9.0 (minimum 3.10 required)")), mock.patch(
+            "talaria.cli.check_binary", return_value=Check("ok", True, "ok")
+        ), mock.patch(
+            "talaria.cli.check_codex_login", return_value=Check("codex login", True, "ok")
+        ), mock.patch(
+            "talaria.cli.check_model_catalog",
+            return_value=(
+                Check("model catalog", True, "1 visible"),
+                [CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")],
+            ),
+        ), mock.patch(
+            "talaria.cli.check_tls", return_value=Check("tls", True, "ok")
+        ), mock.patch(
+            "talaria.cli.check_loopback_bind", return_value=Check("loopback bind", True, "127.0.0.1:0")
+        ), mock.patch(
+            "talaria.cli.check_gateway_cache", return_value=Check("gateway cache", True, "/tmp/.claude/cache/gateway-models.json")
+        ):
+            with redirect_stdout(output):
+                rc = cli.run_setup([])
+
+        self.assertEqual(rc, 1)
+        self.assertIn("python: fail (3.9.0 (minimum 3.10 required))", output.getvalue())
+
     def test_print_security_summary_does_not_log_tokens(self):
         from talaria.catalog import CodexModel
         from talaria.cli import _print_security_summary

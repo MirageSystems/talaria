@@ -15,6 +15,7 @@ from . import codex
 from .checks import (
     Check,
     check_binary,
+    check_python,
     check_codex_login,
     check_gateway_cache,
     check_loopback_bind,
@@ -140,7 +141,7 @@ def _format_check(check: Check) -> str:
 
 def _run_launch_checks(host: str, port: int) -> tuple[bool, list[Check], list]:
     checks: list[Check] = [
-        check_binary("python3"),
+        check_python(),
         check_binary("claude"),
         check_binary("codex"),
         check_codex_login(),
