@@ -21,10 +21,10 @@ def _check_codex_login() -> tuple[bool, str]:
             timeout=20,
             check=False,
         )
-        stdout = (out.stdout or "").strip()
+        output = "\n".join(part for part in (out.stdout, out.stderr) if part).strip()
         if out.returncode != 0:
             return False, "codex login status failed."
-        if "Logged in using ChatGPT" not in stdout:
+        if "Logged in using ChatGPT" not in output:
             return False, "codex is not logged in with ChatGPT."
         return True, "codex login present."
     except Exception as exc:

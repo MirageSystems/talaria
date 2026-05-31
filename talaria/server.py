@@ -14,6 +14,15 @@ from . import translate
 
 
 EventStream = Callable[..., Iterable[dict]]
+MAX_BODY_BYTES = 8 * 1024 * 1024
+
+
+def _header_value(headers: dict, name: str) -> str:
+    target = name.lower()
+    for key, value in (headers or {}).items():
+        if str(key).lower() == target:
+            return str(value)
+    return ""
 
 
 class TalariaApp:
@@ -56,6 +65,18 @@ class TalariaApp:
 
         if method != "POST" or target != "/v1/messages":
             return self._json_error(404, f"Unsupported path: {target}")
+
+        origin = _header_value(headers, "origin")
+        fetch_site = _header_value(headers, "sec-fetch-site").lower()
+        if origin or (fetch_site and fetch_site not in ("none", "same-origin")):
+            return self._json_error(403, "browser-origin requests are not accepted")
+
+        content_type = _header_value(headers, "content-type").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            return self._json_error(415, "POST /v1/messages requires application/json")
+
+        if len(body) > MAX_BODY_BYTES:
+            return self._json_error(413, "request body too large")
 
         try:
             req = json.loads(body.decode("utf-8"))
@@ -113,9 +134,14 @@ def create_http_handler(app: TalariaApp):
             body = b""
             if length:
                 try:
-                    body = self.rfile.read(int(length))
+                    body_len = int(length)
                 except Exception:
-                    body = b""
+                    body_len = 0
+                if body_len > MAX_BODY_BYTES:
+                    status, headers, body = app._json_error(413, "request body too large")
+                    self._write_response(status, headers, body)
+                    return
+                body = self.rfile.read(body_len) if body_len > 0 else b""
             status, headers, body = app.handle("POST", self.path, dict(self.headers), body)
             self._write_response(status, headers, body)
 

@@ -45,7 +45,7 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 
 def _run_codex(args: list[str]) -> str:
-    executable = os.environ.get("CODEX_EXECUTABLE") or shutil.which("codex")
+    executable = shutil.which("codex")
     if not executable:
         raise CodexCatalogError("`codex` CLI is not installed or not on PATH.")
     try:
@@ -62,7 +62,7 @@ def _run_codex(args: list[str]) -> str:
         if not stderr:
             stderr = "unknown error"
         raise CodexCatalogError(f"`{executable} {' '.join(args)}` failed: {stderr}")
-    return proc.stdout
+    return "\n".join(part for part in (proc.stdout, proc.stderr) if part)
 
 
 def catalog_from_debug_json(raw: dict[str, object]) -> List[CodexModel]:

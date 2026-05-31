@@ -14,11 +14,9 @@ from pathlib import Path
 
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
 AUTH_FILE = CODEX_HOME / "auth.json"
-BASE_URL = os.environ.get("TALARIA_CODEX_BASE_URL", "https://chatgpt.com/backend-api/codex").rstrip("/")
-RESPONSES_URL = BASE_URL + "/responses"
+RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses"
 DEFAULT_REASONING_EFFORT = os.environ.get("TALARIA_REASONING_EFFORT", "medium")
 DEFAULT_SERVICE_TIER = os.environ.get("TALARIA_SERVICE_TIER", "").strip()
-REFRESH_CMD = os.environ.get("TALARIA_REFRESH_CMD", "codex login status")
 
 
 class CodexAuthError(RuntimeError):
@@ -53,10 +51,8 @@ def _account_id(token: str) -> str | None:
 
 
 def _best_effort_refresh() -> None:
-    if not REFRESH_CMD:
-        return
     try:
-        subprocess.run(REFRESH_CMD.split(), capture_output=True, timeout=20, check=False)
+        subprocess.run(["codex", "login", "status"], capture_output=True, timeout=20, check=False)
     except Exception:
         pass
 
@@ -117,9 +113,8 @@ def _as_int(value: str) -> int | None:
     return parsed if parsed > 0 else None
 
 
-def _iter_sse_events(response) -> list[tuple[str, dict]]:
+def _iter_sse_events(response):
     buffer = b""
-    events = []
     while True:
         chunk = response.read(4096)
         if not chunk:
@@ -149,8 +144,7 @@ def _iter_sse_events(response) -> list[tuple[str, dict]]:
                     obj = json.loads(payload)
                 except Exception:
                     continue
-                events.append((event_name, obj))
-    return events
+                yield event_name, obj
 
 
 def stream_events(

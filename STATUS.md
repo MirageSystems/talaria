@@ -1,5 +1,24 @@
 # Status
 
+## 2026-06-01 02:45 [SECURITY] pre-test hardening
+
+Before live testing, reviewed the local gateway security boundary and fixed:
+
+- Codex CLI status parsing when `codex login status` writes to stderr.
+- Browser-origin POST rejection on `/v1/messages`.
+- `Content-Type: application/json` enforcement for message requests.
+- 8 MiB request body cap.
+- Pinned Codex backend URL; no environment override can receive the Codex bearer token.
+- Removed shell-based npm wrapper Python override.
+- Changed upstream SSE parsing to yield incrementally instead of buffering the full stream.
+
+Validation:
+- `python3 -m compileall talaria tests`
+- `python3 -m unittest discover -s tests -v` (13 tests)
+- `npm test`
+- `python3 -m talaria.cli doctor`
+- `node bin/talaria.js doctor`
+
 ## 2026-06-01 02:28 [IMPLEMENTATION] talaria runtime committed
 
 Implemented a Codex-only runtime in this repo:

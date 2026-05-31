@@ -10,10 +10,9 @@ const pythonPath = process.env.PYTHONPATH
   : repoRoot;
 
 function findPython() {
-  const candidates = [process.env.TALARIA_PYTHON || "", "python3", "python", "py -3"];
+  const candidates = [["python3"], ["python"], ["py", "-3"]];
   for (const candidate of candidates) {
-    if (!candidate) continue;
-    const proc = spawnSync(candidate, ["--version"], { encoding: "utf8", shell: candidate.includes(" ") });
+    const proc = spawnSync(candidate[0], [...candidate.slice(1), "--version"], { encoding: "utf8" });
     if (!proc.error) return candidate;
   }
   return null;
@@ -26,13 +25,12 @@ if (!python) {
 }
 
 const proc = spawnSync(
-  python,
-  ["-m", "talaria.cli", ...process.argv.slice(2)],
+  python[0],
+  [...python.slice(1), "-m", "talaria.cli", ...process.argv.slice(2)],
   {
     stdio: "inherit",
     cwd: repoRoot,
     env: { ...process.env, PYTHONPATH: pythonPath },
-    shell: python.includes(" "),
   },
 );
 

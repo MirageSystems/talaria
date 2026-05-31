@@ -60,6 +60,16 @@ Only models visible in `codex debug models` are exposed, and only through a
 - `TALARIA_MAX_OUTPUT_TOKENS`
 - `CODEX_HOME`
 
+Talaria intentionally does not expose a Codex base URL override. Subscription
+tokens from `codex login` are only sent to
+`https://chatgpt.com/backend-api/codex/responses`.
+
+## Local server security
+
+Talaria binds to `127.0.0.1` by default. The message endpoint rejects
+browser-originated requests, requires `Content-Type: application/json`, and caps
+request bodies at 8 MiB.
+
 ## Development
 
 - Run tests: `python3 -m unittest discover -s tests -v`

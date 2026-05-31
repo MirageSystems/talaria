@@ -38,6 +38,38 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(CodexCatalogError, "No visible Codex models"):
             catalog_from_debug_json({"models": [{"slug": "hidden", "visibility": "hide"}]})
 
+    def test_discover_catalog_accepts_codex_status_on_stderr(self):
+        import talaria.catalog as catalog_mod
+
+        def fake_run(args, capture_output, text, check):
+            class Proc:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            proc = Proc()
+            if args[-2:] == ["login", "status"]:
+                proc.stderr = "Logged in using ChatGPT\n"
+            elif args[-2:] == ["debug", "models"]:
+                proc.stdout = json.dumps(
+                    {
+                        "models": [
+                            {
+                                "slug": "gpt-5.5",
+                                "display_name": "GPT-5.5",
+                                "visibility": "list",
+                            }
+                        ]
+                    }
+                )
+            return proc
+
+        with mock.patch.object(catalog_mod.shutil, "which", return_value="/bin/codex"):
+            with mock.patch.object(catalog_mod.subprocess, "run", side_effect=fake_run):
+                discovered = catalog_mod.discover_catalog()
+
+        self.assertEqual([m.slug for m in discovered], ["gpt-5.5"])
+
 
 class TranslationTests(unittest.TestCase):
     def test_anthropic_tools_and_tool_results_convert_to_responses(self):
@@ -141,6 +173,11 @@ class CodexProviderTests(unittest.TestCase):
         self.assertEqual(captured["body"]["service_tier"], "priority")
         self.assertIn({"type": "text_delta", "text": "ok"}, events)
 
+    def test_codex_backend_is_pinned_to_chatgpt(self):
+        import talaria.codex as codex
+
+        self.assertEqual(codex.RESPONSES_URL, "https://chatgpt.com/backend-api/codex/responses")
+
 
 class ServerTests(unittest.TestCase):
     def test_server_models_and_streaming_response(self):
@@ -172,7 +209,7 @@ class ServerTests(unittest.TestCase):
                 "tools": [{"name": "get_weather", "input_schema": {"type": "object", "properties": {}}}],
             }
         ).encode("utf-8")
-        status, headers, out = app.handle("POST", "/v1/messages", {}, body)
+        status, headers, out = app.handle("POST", "/v1/messages", {"Content-Type": "application/json"}, body)
         self.assertEqual(status, 200)
         self.assertEqual(headers["Content-Type"], "text/event-stream")
         self.assertIn(b'"type": "tool_use"', out)
@@ -183,10 +220,60 @@ class ServerTests(unittest.TestCase):
         from talaria.server import TalariaApp
 
         app = TalariaApp([CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")])
-        status, _headers, body = app.handle("POST", "/v1/messages", {}, b'{"model":"claude-missing","messages":[]}')
+        status, _headers, body = app.handle(
+            "POST",
+            "/v1/messages",
+            {"Content-Type": "application/json"},
+            b'{"model":"claude-missing","messages":[]}',
+        )
 
         self.assertEqual(status, 400)
         self.assertIn("unknown Codex model alias", body.decode("utf-8"))
+
+    def test_rejects_browser_origin_posts(self):
+        from talaria.catalog import CodexModel
+        from talaria.server import TalariaApp
+
+        app = TalariaApp([CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")])
+        status, _headers, body = app.handle(
+            "POST",
+            "/v1/messages",
+            {"Content-Type": "application/json", "Origin": "https://evil.example"},
+            b'{"model":"claude-gpt-5.5","messages":[]}',
+        )
+
+        self.assertEqual(status, 403)
+        self.assertIn("browser-origin requests are not accepted", body.decode("utf-8"))
+
+    def test_rejects_non_json_message_posts(self):
+        from talaria.catalog import CodexModel
+        from talaria.server import TalariaApp
+
+        app = TalariaApp([CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")])
+        status, _headers, body = app.handle(
+            "POST",
+            "/v1/messages",
+            {"Content-Type": "text/plain"},
+            b'{"model":"claude-gpt-5.5","messages":[]}',
+        )
+
+        self.assertEqual(status, 415)
+        self.assertIn("application/json", body.decode("utf-8"))
+
+    def test_rejects_oversized_message_body(self):
+        from talaria.catalog import CodexModel
+        from talaria.server import TalariaApp, MAX_BODY_BYTES
+
+        app = TalariaApp([CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")])
+        status, _headers, body = app.handle(
+            "POST",
+            "/v1/messages",
+            {"Content-Type": "application/json"},
+            b"{" + (b'"x":' + b'"a"' * (MAX_BODY_BYTES // 2)) + b"}",
+        )
+
+        self.assertEqual(status, 413)
+        self.assertIn("request body too large", body.decode("utf-8"))
 
 
 class CliTests(unittest.TestCase):
