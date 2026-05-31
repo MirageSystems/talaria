@@ -1,5 +1,18 @@
 # Status
 
+## 2026-06-01 02:28 [IMPLEMENTATION] talaria runtime committed
+
+Implemented a Codex-only runtime in this repo:
+
+- `talaria` package (`catalog`, `codex`, `translate`, `server`, `doctor`, `cli`).
+- Local-only auth path via `~/.codex/auth.json` and `codex` command checks; no OpenAI API key flow.
+- Gateway cache seeding + launcher flow for `talaria` default and `talaria serve`.
+- Minimal npm wrapper and CI pipeline for compile + test.
+- Offline test coverage in `tests/test_runtime.py`.
+
+Commit:
+- `28dc9f1` (signed)
+
 ## 2026-06-01 02:11 [PLAN] autonomous build start
 
 Task:
