@@ -3,9 +3,45 @@
   "version": "0.1.0",
   "description": "Claude Code gateway for Codex subscription models (via `codex login`).",
   "private": false,
+  "homepage": "https://github.com/MirageSystems/talaria",
+  "bugs": {
+    "url": "https://github.com/MirageSystems/talaria/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MirageSystems/talaria.git"
+  },
+  "keywords": [
+    "claude",
+    "codex",
+    "gateway",
+    "openai",
+    "claude-code"
+  ],
   "bin": {
     "talaria": "./bin/talaria.js"
   },
+  "files": [
+    "bin/talaria.js",
+    "talaria/__init__.py",
+    "talaria/catalog.py",
+    "talaria/checks.py",
+    "talaria/cli.py",
+    "talaria/codex.py",
+    "talaria/doctor.py",
+    "talaria/server.py",
+    "talaria/smoke.py",
+    "talaria/translate.py",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "docs/ROADMAP.md",
+    "docs/TROUBLESHOOTING.md",
+    "docs/RELEASE.md",
+    "docs/superpowers/specs/"
+  ],
   "scripts": {
     "test": "python3 -m unittest discover -s tests -v"
   },

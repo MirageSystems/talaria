@@ -38,6 +38,21 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(CodexCatalogError, "No visible Codex models"):
             catalog_from_debug_json({"models": [{"slug": "hidden", "visibility": "hide"}]})
 
+    def test_catalog_deduplicates_duplicate_slugs(self):
+        from talaria.catalog import catalog_from_debug_json
+
+        raw = {
+            "models": [
+                {"slug": "gpt-5.5", "display_name": "GPT-5.5", "visibility": "list"},
+                {"slug": "gpt-5.5", "display_name": "GPT-5.5 duplicate", "visibility": "list"},
+            ]
+        }
+
+        catalog = catalog_from_debug_json(raw)
+
+        self.assertEqual([m.slug for m in catalog], ["gpt-5.5"])
+        self.assertEqual([m.alias for m in catalog], ["claude-gpt-5.5"])
+
     def test_discover_catalog_accepts_codex_status_on_stderr(self):
         import talaria.catalog as catalog_mod
 
@@ -318,6 +333,71 @@ class CliTests(unittest.TestCase):
         args = claude_launch_args(["--dangerously-skip-permission", "--model", "claude-gpt-5.5"])
 
         self.assertEqual(args, ["--model", "claude-gpt-5.5", "--dangerously-skip-permissions"])
+
+    def test_talaria_launch_rejects_non_loopback_host(self):
+        import talaria.cli as cli
+
+        rc = cli.run(["--host", "0.0.0.0"])  # still uses preflight path before launch
+
+        self.assertEqual(rc, 1)
+
+    def test_parse_smoke_args_uses_model(self):
+        from talaria.smoke import parse_smoke_args
+
+        live, model = parse_smoke_args(["--live", "--model", "claude-gpt-5.5"])
+
+        self.assertTrue(live)
+        self.assertEqual(model, "claude-gpt-5.5")
+
+
+class ChecksTests(unittest.TestCase):
+    def test_is_loopback_host(self):
+        from talaria.checks import is_loopback_host
+
+        self.assertTrue(is_loopback_host("127.0.0.1"))
+        self.assertTrue(is_loopback_host("::1"))
+        self.assertTrue(is_loopback_host("localhost"))
+        self.assertFalse(is_loopback_host("0.0.0.1"))
+
+    def test_run_local_gateway_smoke_offline(self):
+        from talaria.catalog import CodexModel
+        from talaria.checks import run_local_gateway_smoke
+
+        checks, base_url = run_local_gateway_smoke(
+            host="127.0.0.1",
+            port=0,
+            catalog=[
+                CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium"),
+            ],
+            event_stream=lambda **_kwargs: iter([]),
+        )
+
+        self.assertEqual(base_url.split(":")[-1] != "", True)
+        self.assertTrue(all(item.ok for item in checks))
+
+
+class SmokeTests(unittest.TestCase):
+    def test_smoke_offline_default_invocation(self):
+        import talaria.cli as cli
+
+        with mock.patch.object(cli, "run_smoke") as run_smoke:
+            run_smoke.return_value = 0
+            rc = cli.run(["smoke"])
+
+        self.assertEqual(rc, 0)
+        run_smoke.assert_called_once()
+
+
+class DoctorTests(unittest.TestCase):
+    def test_doctor_runs_setup_command_checks(self):
+        import talaria.cli as cli
+
+        with mock.patch.object(cli, "run_doctor") as run_doctor:
+            run_doctor.return_value = 0
+            rc = cli.run(["doctor"])
+
+        self.assertEqual(rc, 0)
+        run_doctor.assert_called_once()
 
     def test_dangerously_skip_permissions_env_adds_claude_flag(self):
         from talaria.cli import claude_launch_args

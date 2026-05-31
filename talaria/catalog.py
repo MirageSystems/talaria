@@ -71,6 +71,7 @@ def catalog_from_debug_json(raw: dict[str, object]) -> List[CodexModel]:
         raise CodexCatalogError("Invalid catalog payload: expected a JSON object.")
 
     models: list[CodexModel] = []
+    seen: set[str] = set()
     for item in raw.get("models", []):
         if not isinstance(item, dict):
             continue
@@ -79,6 +80,9 @@ def catalog_from_debug_json(raw: dict[str, object]) -> List[CodexModel]:
         slug = item.get("slug")
         if not isinstance(slug, str) or not slug.strip():
             continue
+        canonical = slug.strip()
+        if canonical in seen:
+            continue
         alias = f"claude-{slug.strip()}"
         display_name = item.get("display_name") or slug
         if not isinstance(display_name, str):
@@ -86,9 +90,10 @@ def catalog_from_debug_json(raw: dict[str, object]) -> List[CodexModel]:
         reasoning = item.get("default_reasoning_level") or item.get("reasoning_effort") or "medium"
         if not isinstance(reasoning, str):
             reasoning = "medium"
+        seen.add(canonical)
         models.append(
             CodexModel(
-                slug=slug.strip(),
+                slug=canonical,
                 alias=alias,
                 display_name=display_name.strip() if isinstance(display_name, str) else slug,
                 reasoning_effort=reasoning.strip() or "medium",

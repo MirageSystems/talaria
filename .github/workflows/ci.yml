@@ -24,6 +24,12 @@ jobs:
           test -f README.md
           test -f LICENSE
           test -f .gitignore
+          test -f CHANGELOG.md
+          test -f SECURITY.md
+          test -f CONTRIBUTING.md
+          test -f docs/RELEASE.md
+          test -f docs/TROUBLESHOOTING.md
+          test -f package.json
       - name: Run python checks
         run: |
           python3 -m compileall talaria tests
@@ -31,3 +37,6 @@ jobs:
       - name: Run npm test
         run: |
           npm test
+      - name: Validate package metadata
+        run: |
+          npm pack --dry-run
