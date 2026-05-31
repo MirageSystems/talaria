@@ -25,7 +25,17 @@ authentication secrets into third-party APIs. It expects an existing local
 - Browser-origin requests are rejected on `/v1/messages`.
 - `Content-Type: application/json` is required for message requests.
 - Request bodies are capped at 8 MiB.
+- Upstream response conversion is bounded.
+- Gateway cache files are written with private permissions and symlink targets are rejected.
 - Model IDs are sourced only from logged-in Codex visibility data.
+
+## Local process boundary
+
+Talaria v1 is intended for trusted local workstations. The gateway is loopback
+only and blocks browser-origin requests, but it does not yet require a separate
+gateway authentication token from non-browser local clients. Do not run Talaria
+on shared machines where other local users or untrusted local processes should
+not be able to connect to your loopback services.
 
 ## Reporting issues
 
@@ -38,4 +48,3 @@ sensitive credentials in public issue comments.
 - Do not write or script around `~/.claude/cache/gateway-models.json`.
 - If TLS verification fails for `chatgpt.com`, resolve Python trust-store issues
   before running live model commands.
-

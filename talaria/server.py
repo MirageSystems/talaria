@@ -15,6 +15,8 @@ from . import translate
 
 EventStream = Callable[..., Iterable[dict]]
 MAX_BODY_BYTES = 8 * 1024 * 1024
+MAX_RESPONSE_EVENTS = 4096
+MAX_RESPONSE_CHARS = 4 * 1024 * 1024
 
 
 def _header_value(headers: dict, name: str) -> str:
@@ -43,6 +45,11 @@ class TalariaApp:
         if details:
             payload["error"]["details"] = details
         return status, {"Content-Type": "application/json"}, json.dumps(payload).encode("utf-8")
+
+    def _upstream_error(self, status: int) -> tuple[int, dict, bytes]:
+        if status == 401:
+            return self._json_error(401, "Codex authentication failed; run `codex login`.")
+        return self._json_error(status, "Codex upstream request failed")
 
     def handle(self, method: str, path: str, headers: dict, body: bytes) -> tuple[int, dict[str, str], bytes]:
         parsed = urlparse(path or "/")
@@ -107,22 +114,22 @@ class TalariaApp:
                 reasoning_effort=model.reasoning_effort,
                 service_tier=os.environ.get("TALARIA_SERVICE_TIER") or None,
             )
-        except Exception as exc:
-            return self._json_error(502, f"upstream stream init failed: {exc}")
+        except Exception:
+            return self._upstream_error(502)
 
         if stream:
-            event_list = list(events)
+            event_list = list(_bounded_events(events))
             error = _first_error(event_list)
             if error:
-                return self._json_error(int(error.get("status", 502) or 502), str(error.get("message") or "upstream error"))
+                return self._upstream_error(int(error.get("status", 502) or 502))
             out = b"".join(translate.events_to_anthropic_sse(event_list, model.alias))
             headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}
             return 200, headers, out
 
-        non_stream_events = list(events)
+        non_stream_events = list(_bounded_events(events))
         error = _first_error(non_stream_events)
         if error:
-            return self._json_error(int(error.get("status", 502) or 502), str(error.get("message") or "upstream error"))
+            return self._upstream_error(int(error.get("status", 502) or 502))
         return (
             200,
             {"Content-Type": "application/json"},
@@ -174,6 +181,28 @@ def _first_error(events: Iterable[dict]) -> dict | None:
         if isinstance(event, dict) and event.get("type") == "error":
             return event
     return None
+
+
+def _event_chars(event) -> int:
+    if isinstance(event, str):
+        return len(event)
+    if isinstance(event, dict):
+        return sum(_event_chars(key) + _event_chars(value) for key, value in event.items())
+    if isinstance(event, list):
+        return sum(_event_chars(item) for item in event)
+    return 0
+
+
+def _bounded_events(events: Iterable[dict]) -> Iterable[dict]:
+    count = 0
+    chars = 0
+    for event in events:
+        count += 1
+        chars += _event_chars(event)
+        if count > MAX_RESPONSE_EVENTS or chars > MAX_RESPONSE_CHARS:
+            yield {"type": "error", "message": "upstream response exceeded Talaria limits", "status": 502}
+            return
+        yield event
 
 
 def run_server(host: str, port: int, catalog: Iterable[CodexModel], event_stream: EventStream = codex.stream_events):

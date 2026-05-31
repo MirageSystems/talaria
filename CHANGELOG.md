@@ -16,4 +16,7 @@
 - Browser-origin and invalid `Content-Type` handling for `/v1/messages`.
 - SSE parsing and streaming error propagation in Codex adapter.
 - Gateway cache seeding and launch-time startup reliability.
-
+- TLS diagnostics now treat HTTP errors from `chatgpt.com` as successful TLS establishment.
+- Gateway cache writes now use private permissions and reject symlink targets.
+- Upstream response conversion is capped to reduce local memory exhaustion risk.
+- Upstream error responses no longer reflect raw upstream/internal messages.

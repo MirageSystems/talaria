@@ -252,7 +252,7 @@ class ServerTests(unittest.TestCase):
 
         app = TalariaApp(
             [CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")],
-            event_stream=lambda **_kwargs: iter([{"type": "error", "message": "upstream failed", "status": 502}]),
+            event_stream=lambda **_kwargs: iter([{"type": "error", "message": "upstream failed with secret-token", "status": 502}]),
         )
 
         status, _headers, body = app.handle(
@@ -263,7 +263,28 @@ class ServerTests(unittest.TestCase):
         )
 
         self.assertEqual(status, 502)
-        self.assertIn("upstream failed", body.decode("utf-8"))
+        text = body.decode("utf-8")
+        self.assertIn("Codex upstream request failed", text)
+        self.assertNotIn("secret-token", text)
+
+    def test_stream_response_is_capped(self):
+        from talaria.catalog import CodexModel
+        from talaria.server import TalariaApp, MAX_RESPONSE_CHARS
+
+        app = TalariaApp(
+            [CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")],
+            event_stream=lambda **_kwargs: iter([{"type": "text_delta", "text": "x" * (MAX_RESPONSE_CHARS + 1)}]),
+        )
+
+        status, _headers, body = app.handle(
+            "POST",
+            "/v1/messages",
+            {"Content-Type": "application/json"},
+            b'{"model":"claude-gpt-5.5","stream":true,"messages":[]}',
+        )
+
+        self.assertEqual(status, 502)
+        self.assertIn("Codex upstream request failed", body.decode("utf-8"))
 
     def test_rejects_browser_origin_posts(self):
         from talaria.catalog import CodexModel
@@ -375,6 +396,23 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("Bearer", text)
         self.assertNotIn("access_token", text)
 
+    def test_gateway_cache_write_is_private_and_rejects_symlink(self):
+        from talaria.cli import _write_gateway_cache
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_path = Path(temp_dir) / "gateway-models.json"
+            with mock.patch.dict(os.environ, {"TALARIA_GATEWAY_CACHE": str(cache_path)}):
+                _write_gateway_cache("http://127.0.0.1:8141", [{"id": "claude-gpt-5.5"}])
+
+            self.assertEqual(cache_path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(cache_path.parent.stat().st_mode & 0o777, 0o700)
+
+            cache_path.unlink()
+            cache_path.symlink_to(Path(temp_dir) / "target.json")
+            with mock.patch.dict(os.environ, {"TALARIA_GATEWAY_CACHE": str(cache_path)}):
+                with self.assertRaisesRegex(RuntimeError, "must not be a symlink"):
+                    _write_gateway_cache("http://127.0.0.1:8141", [{"id": "claude-gpt-5.5"}])
+
     def test_gateway_cache_shape(self):
         from talaria.cli import gateway_cache_payload
 
@@ -447,6 +485,31 @@ class ChecksTests(unittest.TestCase):
             result = checks_mod.check_python()
         self.assertFalse(result.ok)
         self.assertIn("minimum 3.10 required", result.message)
+
+    def test_check_tls_treats_http_error_as_tls_success(self):
+        import urllib.error
+        import talaria.checks as checks_mod
+
+        error = urllib.error.HTTPError("https://chatgpt.com", 403, "Forbidden", {}, io.BytesIO(b""))
+        with mock.patch.object(checks_mod.urllib.request, "urlopen", side_effect=error):
+            result = checks_mod.check_tls()
+        error.close()
+
+        self.assertTrue(result.ok)
+        self.assertIn("HTTP 403", result.message)
+
+    def test_check_gateway_cache_rejects_symlink(self):
+        from talaria.checks import check_gateway_cache
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / "target.json"
+            symlink = Path(temp_dir) / "gateway-models.json"
+            symlink.symlink_to(target)
+
+            result = check_gateway_cache(str(symlink))
+
+        self.assertFalse(result.ok)
+        self.assertIn("symlink", result.message)
 
 
 class SmokeTests(unittest.TestCase):

@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.request
@@ -119,9 +120,27 @@ def gateway_cache_payload(base_url: str, models: list[dict], now_ms: int | None 
 
 def _write_gateway_cache(base_url: str, models: list[dict]) -> None:
     cache_path = _cli_gateway_cache_path()
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    cache_path.parent.chmod(0o700)
+    if cache_path.is_symlink():
+        raise RuntimeError(f"gateway cache path must not be a symlink: {cache_path}")
+
     payload = gateway_cache_payload(base_url, models)
-    cache_path.write_text(json.dumps(payload), encoding="utf-8")
+    fd, tmp_name = tempfile.mkstemp(dir=cache_path.parent, prefix=f".{cache_path.name}.", text=True)
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, cache_path)
+        os.chmod(cache_path, 0o600)
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def _print_security_summary(base_url: str, catalog: list, gateway_cache: str) -> None:

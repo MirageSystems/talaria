@@ -121,6 +121,8 @@ def check_tls() -> Check:
         with urllib.request.urlopen(request, timeout=4, context=context) as response:
             _ = response.status
             return Check("tls", True, cert_label)
+    except urllib.error.HTTPError as exc:
+        return Check("tls", True, f"{cert_label} (HTTP {exc.code})")
     except urllib.error.URLError as exc:
         detail = str(exc)
         if candidate_file:
@@ -138,6 +140,8 @@ def check_gateway_cache(cache_path: str | None = None) -> Check:
     ).expanduser()
 
     try:
+        if path.is_symlink():
+            return Check("gateway cache", False, f"{path} is a symlink")
         path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=".talaria-cache-test-", delete=True) as handle:
             handle.write(str(int(time.time() * 1000)))
