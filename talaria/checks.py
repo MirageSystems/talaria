@@ -15,6 +15,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
@@ -43,9 +44,9 @@ def is_loopback_host(host: str) -> bool:
 
 
 def check_python() -> Check:
-    import sys
-
     version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    if (sys.version_info.major, sys.version_info.minor) < (3, 10):
+        return Check("python", False, f"{version} (minimum 3.10 required)")
     return Check("python", True, version)
 
 

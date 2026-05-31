@@ -127,6 +127,7 @@ def run_smoke(argv: list[str]) -> int:
         catalog,
         event_stream=lambda **_kwargs: iter(()),
     )
+    checks.append(Check("server", bool(base_url), base_url))
     checks.extend(server_checks)
 
     for check in checks:

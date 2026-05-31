@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -311,6 +312,40 @@ class ServerTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_print_setup_help_includes_next_actions(self):
+        from talaria.checks import Check
+        import talaria.cli as cli
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            cli._print_setup_help(
+                [
+                    Check("claude", False, "NOT FOUND"),
+                    Check("tls", False, "TLS check failed: cert issue"),
+                ]
+            )
+        text = output.getvalue()
+        self.assertIn("Talaria cannot start yet.", text)
+        self.assertIn("Install: npm install -g @anthropic-ai/claude-code", text)
+        self.assertIn("Run: talaria doctor", text)
+
+    def test_print_security_summary_does_not_log_tokens(self):
+        from talaria.catalog import CodexModel
+        from talaria.cli import _print_security_summary
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            _print_security_summary(
+                "http://127.0.0.1:8141",
+                [CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")],
+                "/tmp/.claude/cache/gateway-models.json",
+            )
+        text = output.getvalue()
+        self.assertIn("Talaria listening on http://127.0.0.1:8141", text)
+        self.assertIn("Codex backend: https://chatgpt.com/backend-api/codex/responses", text)
+        self.assertNotIn("Bearer", text)
+        self.assertNotIn("access_token", text)
+
     def test_gateway_cache_shape(self):
         from talaria.cli import gateway_cache_payload
 
@@ -375,6 +410,15 @@ class ChecksTests(unittest.TestCase):
         self.assertEqual(base_url.split(":")[-1] != "", True)
         self.assertTrue(all(item.ok for item in checks))
 
+    def test_check_python_requires_minimum_version(self):
+        import talaria.checks as checks_mod
+
+        fake_version = mock.Mock(major=3, minor=9, micro=0)
+        with mock.patch.object(checks_mod.sys, "version_info", fake_version):
+            result = checks_mod.check_python()
+        self.assertFalse(result.ok)
+        self.assertIn("minimum 3.10 required", result.message)
+
 
 class SmokeTests(unittest.TestCase):
     def test_smoke_offline_default_invocation(self):
@@ -386,6 +430,63 @@ class SmokeTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         run_smoke.assert_called_once()
+
+    def test_smoke_prints_server_line(self):
+        from talaria.smoke import Check, run_smoke
+        from talaria.catalog import CodexModel
+
+        with mock.patch("talaria.smoke.check_python", return_value=Check("python", True, "3.14.2")), mock.patch(
+            "talaria.smoke.check_codex_login", return_value=Check("codex login", True, "ok")
+        ), mock.patch(
+            "talaria.smoke.check_model_catalog",
+            return_value=(Check("model catalog", True, "1 visible"), [CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")]),
+        ), mock.patch(
+            "talaria.smoke.check_loopback_bind", return_value=Check("loopback bind", True, "127.0.0.1:0")
+        ), mock.patch(
+            "talaria.smoke.check_gateway_cache", return_value=Check("gateway cache", True, "/tmp/.claude/cache/gateway-models.json")
+        ), mock.patch(
+            "talaria.smoke.run_local_gateway_smoke",
+            return_value=(
+                [
+                    Check("healthz", True, "ok"),
+                    Check("models", True, "ok"),
+                    Check("security controls", True, "ok"),
+                ],
+                "http://127.0.0.1:12345",
+            ),
+        ):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                rc = run_smoke([])
+
+        self.assertEqual(rc, 0)
+        self.assertIn("server: ok (http://127.0.0.1:12345)", output.getvalue())
+
+    def test_smoke_live_unknown_model_fails(self):
+        from talaria.catalog import CodexModel
+        from talaria.smoke import Check, run_smoke
+
+        with mock.patch("talaria.smoke.check_python", return_value=Check("python", True, "3.14.2")), mock.patch(
+            "talaria.smoke.check_codex_login", return_value=Check("codex login", True, "ok")
+        ), mock.patch(
+            "talaria.smoke.check_model_catalog",
+            return_value=(
+                Check("model catalog", True, "1 visible"),
+                [CodexModel("gpt-5.5", "claude-gpt-5.5", "GPT-5.5", "medium")],
+            ),
+        ):
+            with mock.patch("talaria.smoke.check_loopback_bind"), mock.patch("talaria.smoke.check_gateway_cache"), mock.patch(
+                "talaria.smoke.run_local_gateway_smoke",
+                return_value=([Check("healthz", True, "ok"), Check("models", True, "ok"), Check("security controls", True, "ok")], "http://127.0.0.1:1"),
+            ), mock.patch(
+                "talaria.smoke.run_local_gateway", return_value=mock.MagicMock()
+            ):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    rc = run_smoke(["--live", "--model", "claude-missing"])
+
+        self.assertEqual(rc, 1)
+        self.assertIn("live non-stream: fail", output.getvalue())
 
 
 class DoctorTests(unittest.TestCase):

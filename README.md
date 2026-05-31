@@ -31,6 +31,7 @@ node bin/talaria.js
 
 ```bash
 codex login
+talaria doctor
 talaria setup
 talaria
 ```
@@ -81,4 +82,3 @@ npm test
 ## License
 
 MIT
-
