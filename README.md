@@ -49,6 +49,7 @@ Only models visible in `codex debug models` are exposed, and only through a
 - Optional launch flags:
   - `--host <host>` (default `127.0.0.1`)
   - `--port <port>` (default `8141`)
+  - `--dangerously-skip-permission` (passes Claude Code's `--dangerously-skip-permissions`)
   - extra args are passed through to `claude`
 
 ## Env overrides
@@ -58,6 +59,7 @@ Only models visible in `codex debug models` are exposed, and only through a
 - `TALARIA_SERVICE_TIER`
 - `TALARIA_REASONING_EFFORT`
 - `TALARIA_MAX_OUTPUT_TOKENS`
+- `TALARIA_DANGEROUSLY_SKIP_PERMISSIONS=1`
 - `CODEX_HOME`
 
 Talaria intentionally does not expose a Codex base URL override. Subscription

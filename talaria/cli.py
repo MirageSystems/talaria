@@ -73,6 +73,24 @@ def _parse_host_port_args(argv: list[str]) -> tuple[str, int, list[str]]:
     return host, port, remaining
 
 
+def claude_launch_args(args: list[str]) -> list[str]:
+    out: list[str] = []
+    skip_permissions = os.environ.get("TALARIA_DANGEROUSLY_SKIP_PERMISSIONS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    for arg in args:
+        if arg in ("--dangerously-skip-permission", "--dangerously-skip-permissions"):
+            skip_permissions = True
+            continue
+        out.append(arg)
+    if skip_permissions and "--dangerously-skip-permissions" not in out:
+        out.append("--dangerously-skip-permissions")
+    return out
+
+
 def _wait_for_server(base_url: str, timeout: float = 4.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -125,6 +143,7 @@ def run_server_mode(host: str, port: int) -> int:
 
 def run_launch(cli_args: list[str]) -> int:
     host, port, remaining = _parse_host_port_args(cli_args)
+    remaining = claude_launch_args(remaining)
     base_url = f"http://{host}:{port}"
 
     if shutil.which("claude") is None:

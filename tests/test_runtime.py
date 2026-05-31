@@ -312,6 +312,21 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["fetchedAt"], 123)
         self.assertEqual(payload["models"][0]["id"], "claude-gpt-5.5")
 
+    def test_dangerously_skip_permission_alias_maps_to_claude_flag(self):
+        from talaria.cli import claude_launch_args
+
+        args = claude_launch_args(["--dangerously-skip-permission", "--model", "claude-gpt-5.5"])
+
+        self.assertEqual(args, ["--model", "claude-gpt-5.5", "--dangerously-skip-permissions"])
+
+    def test_dangerously_skip_permissions_env_adds_claude_flag(self):
+        from talaria.cli import claude_launch_args
+
+        with mock.patch.dict(os.environ, {"TALARIA_DANGEROUSLY_SKIP_PERMISSIONS": "1"}):
+            args = claude_launch_args([])
+
+        self.assertEqual(args, ["--dangerously-skip-permissions"])
+
 
 if __name__ == "__main__":
     unittest.main()
